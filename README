@@ -1,0 +1,17 @@
+README
+======
+
+PodBrowser is a documentation browser for Perl. You can view the documentation
+for Perl's builtin functions, its "perldoc" pages, pragmatic modules and the
+default and user-installed modules.
+
+You will need: Perl >= 5.8.0, Gtk+ >= 2.4.0, GNOME >= 2.4.0, GNU gettext and
+the following Perl libraries, available from CPAN:
+
+	Gtk2
+	Gtk2::GladeXML
+	Gtk2::PodViewer
+	Locale::gettext
+
+--
+$Id: README,v 1.1 2004/09/02 15:36:58 jodrell Exp $
