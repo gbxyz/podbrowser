@@ -27,5 +27,18 @@ install:
 	install -m 0755 build/$(NAME)		$(BINDIR)/$(NAME)
 	install -m 0755 html2ps-$(NAME)		$(BINDIR)/html2ps-$(NAME)
 
+po: $(NAME).pl $(NAME).glade
+	xgettext -kgettext -lperl $(NAME).pl
+	sed -i s/charset=CHARSET/charset=UTF-8/ messages.po
+	xgettext -lGlade -j $(NAME).glade
+
+mo:
+	if test -d "locale/$$LANG/LC_MESSAGES"; then \
+		echo "locale/$$LANG/LC_MESSAGES exists"; \
+	else \
+		mkdir -p "locale/$$LANG/LC_MESSAGES"; \
+	fi
+	msgfmt -o "locale/$$LANG/LC_MESSAGES/$(NAME).mo" "$(NAME).$$LANG.po"
+
 clean:
 	rm -rf build

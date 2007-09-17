@@ -3,7 +3,6 @@
 # Copyright (c) 2004 Gavin Brown. All rights reserved. This program is free
 # software; you can redistribute it and/or modify it under the same terms
 # as Perl itself.
-use Data::Dumper;
 use File::Basename qw(dirname);
 use File::Temp qw(tempdir tempfile);
 use Gtk2 -init;
@@ -12,7 +11,6 @@ use Gtk2::Pango;
 use Gtk2::Ex::Simple::List;
 use Gtk2::Ex::PodViewer 0.16;
 use Gtk2::Ex::PodViewer::Parser qw(decode_entities);
-use Gtk2::Ex::PrintDialog;
 use Locale::gettext;
 use Pod::Simple::Search;
 use POSIX qw(setlocale);
@@ -23,7 +21,7 @@ use strict;
 
 ### set up global variables:
 my $NAME		= 'PodBrowser';
-my $VERSION		= '0.10';
+my $VERSION		= '0.11';
 my $PREFIX		= '@PREFIX@';
 my $GLADE_FILE		= (-d $PREFIX ? sprintf('%s/share/%s', $PREFIX, lc($NAME)) : $ENV{PWD}).sprintf('/%s.glade', lc($NAME));
 my $LOCALE_DIR		= (-d $PREFIX ? "PREFIX/share/locale" : $ENV{PWD}.'/locale');
@@ -51,6 +49,11 @@ my $LAST_FAILED_STR;
 setlocale(LC_ALL, $ENV{LANG});
 bindtextdomain(lc($NAME), $LOCALE_DIR);
 textdomain(lc($NAME));
+{
+    no warnings qw(redefine);
+    my $LH = Locale::gettext->domain(lc($NAME));
+    sub gettext { $LH->get(@_) }
+}
 
 ### bits we'll be reusing:
 chomp(my $OPENER	= `which gnome-open 2> /dev/null`);
@@ -141,23 +144,20 @@ $page_index->get_selection->signal_connect('changed', sub {
 
 ### build a tree widget for the full index:
 my $model = Gtk2::TreeStore->new(qw/Gtk2::Gdk::Pixbuf Glib::String/);
-$APP->get_widget('index')->set_model($model);
-$APP->get_widget('index')->insert_column_with_attributes(
-	0,
-	'pixbuf',
-	Gtk2::CellRendererPixbuf->new,
-	pixbuf => 0,
-);
-my $col = Gtk2::CellRendererText->new;
-$col->set('ellipsize-set' => 0, 'ellipsize' => 'end');
-$APP->get_widget('index')->insert_column_with_attributes(
-	1,
-	'document',
-	$col,
-	text => 1,
-);
+my $treeview = $APP->get_widget('index');
+$treeview->set_model($model);
+my $treecolumn = Gtk2::TreeViewColumn->new;
+$treecolumn->set_title('Name');
+my $treecell = Gtk2::CellRendererPixbuf->new;
+$treecolumn->pack_start($treecell, 0);
+$treecolumn->add_attribute($treecell, pixbuf => 0);
+$treecell = Gtk2::CellRendererText->new;
+$treecell->set('ellipsize-set' => 0, 'ellipsize' => 'end');
+$treecolumn->pack_start($treecell, 1);
+$treecolumn->add_attribute($treecell, text => 1);
+$treeview->append_column($treecolumn);
 
-$APP->get_widget('index')->get_selection->signal_connect('changed', \&index_changed);
+$treeview->get_selection->signal_connect('changed', \&index_changed);
 
 eval {
 	my $icon = Gtk2::Gdk::Pixbuf->new_from_file($THEME->lookup_icon(lc($NAME), 16, 'force-svg')->get_filename);
@@ -233,7 +233,7 @@ $APP->get_widget('forward_button')->set_menu(Gtk2::Menu->new);
 $APP->get_widget('up_button')->set_menu(Gtk2::Menu->new);
 
 ### if the program was run with an argument, load the argument as a document:
-set_location($ARGV[0]) if ($ARGV[0] ne '');
+set_location($ARGV[0]) if (defined $ARGV[0] && $ARGV[0] ne '');
 
 Gtk2->main;
 
@@ -251,7 +251,7 @@ sub search_entry_changed {
 sub watch_file {
 	return 1 if ($OPTIONS->{watch} != 1);
 	my $file = $APP->get_widget('location')->entry->get_text;
-	go() if ((stat($file))[9] > $MTIME);
+	go() if ( defined $file && (stat($file))[9] > $MTIME);
 	return 1;
 }
 
@@ -330,12 +330,14 @@ sub about {
 }
 
 sub set_ui_busy {
+    return unless $APP->get_widget('main_window')->window;
 	$APP->get_widget('main_window')->window->set_cursor($BUSY_CURSOR);
 	$viewer->get_window('text')->set_cursor($BUSY_CURSOR);
 	Gtk2->main_iteration while (Gtk2->events_pending);
 }
 
 sub set_ui_waiting {
+    return unless $APP->get_widget('main_window')->window;
 	$APP->get_widget('main_window')->window->set_cursor($NORMAL_CURSOR);
 	$viewer->get_window('text')->set_cursor($NORMAL_CURSOR);
 	Gtk2->main_iteration while (Gtk2->events_pending);
@@ -377,7 +379,7 @@ sub go {
 		### update the history, removing duplicates:
 		my %seen;
 		for (my $i = 0 ; $i < scalar(@HISTORY) ; $i++) {
-			if ($seen{$HISTORY[$i]} == 1) {
+			if (exists $seen{$HISTORY[$i]} && $seen{$HISTORY[$i]} == 1) {
 				splice(@HISTORY, $i, 1);
 			} else {
 				$seen{$HISTORY[$i]} = 1;
@@ -769,7 +771,8 @@ sub generate_index {
 
 	# doing a reverse sort means that later versions of Perl are preferred over newer versions:
 	foreach my $dir (reverse sort @INC) {
-		if (-r "$dir/pod/perlfunc.pod" && $PATHS{perlfunc} eq '') {
+		if (-r "$dir/pod/perlfunc.pod"
+                && (!exists $PATHS{perlfunc} || $PATHS{perlfunc} eq '') ) {
 			$PATHS{perlfunc} = "$dir/pod/perlfunc.pod";
 			last;
 		}
@@ -808,6 +811,7 @@ sub load_index {
 			my $parent_iter = $model->append(undef);
 			$model->set($parent_iter, 0, (defined($CATEGORY_PBFS->{$category}) ? $CATEGORY_PBFS->{$category} : $FOLDER_PBF));
 			$model->set($parent_iter, 1, $categories{$category});
+            unless ( $category eq 'modules' ) {
 			foreach my $doc (sort keys %{$ITEMS->{$category}}) {
 				Gtk2->main_iteration while (Gtk2->events_pending);
 				if ($doc ne '') {
@@ -819,6 +823,13 @@ sub load_index {
 			}
 		}
 	}
+	}
+    if ( $OPTIONS->{hierarchy_module} ) {
+        $APP->get_widget('mod_tree')->set_active(1);
+    }
+    else {
+        toggle_mod_tree();
+    }
 
 	$completion_store->clear;
 	my @items = sort(keys(%{$viewer->get_db}), keys(%{$ITEMS->{funcs}}));
@@ -829,6 +840,92 @@ sub load_index {
 	set_ui_waiting();
 
 	return undef;
+}
+
+sub toggle_mod_tree {
+    my $active = $APP->get_widget('mod_tree')->get_active();
+    my $treeview = $APP->get_widget('index');
+    my $model = $treeview->get_model();
+    $OPTIONS->{hierarchy_module} = $active;
+    set_ui_busy();
+    my $category = 'modules';
+    my $modules = $categories{$category};
+    my $iter = $model->get_iter_first();
+    while ( $model->get_value($iter, 1) ne $modules
+                and ($iter = $model->iter_next($iter)) ) {
+        1;
+    }
+    my $newiter;
+    if ( $iter ) {
+        my $next = $model->iter_next($iter);
+        my $parent = $model->iter_parent($iter);
+        $model->remove($iter);
+        if ( defined $next ) {
+            $newiter = $model->insert_before($parent, $next);
+        } else {
+            $newiter = $model->append($parent);
+        }
+    } else {
+        my $parent = $model->append(undef);
+        $newiter = $model->append($parent);
+    }
+    $model->set($newiter, 0, (defined($CATEGORY_PBFS->{$category}) ? $CATEGORY_PBFS->{$category} : $FOLDER_PBF));
+    $model->set($newiter, 1, $categories{$category});
+    if ( $active ) {
+        my $tree = build_mod_tree([sort keys %{$ITEMS->{$category}}]);
+        my $add_child;
+        $add_child = sub {
+            my $t = shift;
+            my $iter = shift;
+            my $path = shift || [];
+            foreach ( sort keys %$t ) {
+                my $iter_child = $model->append($iter);
+                my $doc = join("::", @$path, $_ );
+                $PATHS->{$doc} = $model->get_path($iter_child);
+                $model->set( $iter_child, 0, $PAGE_PBF);
+                $model->set( $iter_child, 1, $doc );
+                if ( %{$t->{$_}} ) {
+                    $add_child->($t->{$_}, $iter_child, [@$path, $_]);
+                }
+            }
+        };
+        $add_child->($tree, $newiter);
+    } else {
+        foreach my $doc (sort keys %{$ITEMS->{$category}}) {
+            Gtk2->main_iteration while (Gtk2->events_pending);
+            if ($doc ne '') {
+                my $iter = $model->append($newiter);
+                $PATHS->{$doc} = $model->get_path($iter);
+                $model->set($iter, 0, $PAGE_PBF);
+                $model->set($iter, 1, $doc);
+            }
+        }
+    }
+    $treeview->expand_row( $model->get_path($newiter), 0 );
+    set_ui_waiting();
+    return undef;
+}
+
+sub build_mod_tree {
+    my $mods  = shift;
+    my %tree;
+    my $add_children = sub  {
+        my $root = \%tree;
+        foreach ( @_ ) {
+            if ( exists $root->{$_} ) {
+                $root = $root->{$_};
+            } else {
+                my $child = {};
+                $root->{$_} = $child;
+                $root = $child;
+            }
+        }
+    };
+    foreach ( @$mods ) {
+        next if $_ eq '';
+        $add_children->(split /::/, $_);
+    }
+    return \%tree;
 }
 
 sub section_reformat {
@@ -903,7 +1000,7 @@ sub index_changed {
 ### we have to load a custom one:
 sub get_an_icon_theme {
 	my $theme;
-	if ($OPTIONS->{theme} ne '') {
+	if (exists $OPTIONS->{theme} && $OPTIONS->{theme} ne '') {
 		# user specified a particular theme in their .podbrowserrc:
 		$theme = Gtk2::IconTheme->new;
 		$theme->set_custom_theme($OPTIONS->{theme});
@@ -1112,48 +1209,6 @@ sub setup_display {
 }
 
 sub show_print_dialog {
-	my $source = $viewer->parser->source;
-
-	$source = "=over\n\n".$source."\n\n=back\n" if ($source =~ /^=item/);
-	$source = "=pod\n\n".$source."\n\n=cut\n" if ($source !~ /^=pod/m);
-
-	$APP->get_widget('main_window')->set_sensitive(undef);
-	set_ui_busy();
-
-	my $tempdir = tempdir(CLEANUP => 1);
-	my ($fh, $file) = tempfile(DIR=>$tempdir);
-	print $fh $viewer->parser->source;
-	close($fh);
-
-	my $title = $APP->get_widget('location')->entry->get_text;
-
-	my $cwd = $ENV{PWD};
-	my $cmd = sprintf('pod2html --noindex --infile "%s" --title "%s" 2>/dev/null | %s/html2ps-%s 2>/dev/null', $file, $title, dirname($0), lc($NAME));
-	chdir($tempdir);
-	if (!open(CMD, "$cmd|")) {
-		print STDERR $!;
-
-		set_ui_waiting();
-		$APP->get_widget('main_window')->set_sensitive(1);
-
-	} else {
-		my $ps = '';
-		while (<CMD>) {
-			$ps .= $_;
-		}
-		close(CMD);
-		unlink($file);
-
-		my $dialog = Gtk2::Ex::PrintDialog->new;
-		$dialog->set_data($ps);
-
-		set_ui_waiting();
-		$APP->get_widget('main_window')->set_sensitive(1);
-
-		$dialog->run;
-
-	}
-	chdir($ENV{PWD});
 }
 
 sub generate_pod_index {
@@ -1210,8 +1265,6 @@ PodBrowser needs the following:
 =item L<Locale::gettext> and the C<gettext> library
 
 =item L<Gtk2::Ex::PodViewer>
-
-=item L<Gtk2::Ex::PrintDialog>
 
 =item L<Pod::Simple::Search>
 
