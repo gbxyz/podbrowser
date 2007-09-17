@@ -159,6 +159,17 @@ $treeview->append_column($treecolumn);
 
 $treeview->get_selection->signal_connect('changed', \&index_changed);
 
+### build a SimpleList from the glade widget for the search results:
+my $search_results = Gtk2::Ex::Simple::List->new_from_treeview(
+	$APP->get_widget('search_results'),
+	icon	=> 'pixbuf',
+	mark	=> 'text',
+);
+
+$search_results->get_selection->signal_connect('changed', sub {
+	print "FIX ME\n";
+});
+
 eval {
 	my $icon = Gtk2::Gdk::Pixbuf->new_from_file($THEME->lookup_icon(lc($NAME), 16, 'force-svg')->get_filename);
 	$APP->get_widget('main_window')->set_icon($icon);
@@ -1224,6 +1235,15 @@ sub generate_pod_index {
 
 sub set_status {
 	$APP->get_widget('status')->push($APP->get_widget('status')->get_context_id('Default'), shift);
+}
+
+sub search_input_changed {
+	my $text = $APP->get_widget('search_input')->get_text;
+	my @results;
+	use Data::Dumper;
+	foreach my $section (keys(%{$ITEMS})) {
+		print Dumper($ITEMS->{$section});
+	}
 }
 
 __END__
