@@ -316,16 +316,18 @@ sub toggle_watch {
 
 sub about {
 	Gtk2::AboutDialog->set_url_hook(\&open_url);
-	Gtk2->show_about_dialog(
-		$APP->get_widget('main_window'),
-		name		=> $NAME,
-		version		=> $VERSION,
-		comments	=> gettext('A Perl Documentation Browser for GNOME'),,
-		copyright	=> gettext('Copyright 2005 Gavin Brown.'),
-		website		=> sprintf('http://jodrell.net/projects/%s', lc($NAME)),
-		icon		=> $APP->get_widget('main_window')->get_icon,
-		logo		=> $APP->get_widget('main_window')->get_icon,
-	);
+	my $dialog = Gtk2::AboutDialog->new;
+	$dialog->set('name'		=> $NAME);
+	$dialog->set('version'		=> $VERSION);
+	$dialog->set('comments'		=> gettext('A Perl Documentation Browser for GNOME'));
+	$dialog->set('copyright'	=> gettext('Copyright 2005 Gavin Brown.'));
+	$dialog->set('website'		=> sprintf('http://jodrell.net/projects/%s', lc($NAME)));
+	$dialog->set('icon'		=> $APP->get_widget('main_window')->get_icon);
+	$dialog->set('logo'		=> $APP->get_widget('main_window')->get_icon);
+	$dialog->signal_connect('delete_event', sub { $dialog->destroy });
+	$dialog->signal_connect('response', sub { $dialog->destroy });
+	$dialog->signal_connect('close', sub { $dialog->destroy });
+	$dialog->show_all;
 	return 1;
 }
 
