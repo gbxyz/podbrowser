@@ -74,6 +74,18 @@ my %categories		= (
 );
 my $CATEGORY_PBFS	= {};
 
+my $LEVENSTHEIN = 0;
+eval '
+	use Text::LevenshteinXS qw(distance);
+	$LEVENSTHEIN = 1;
+';
+if ($LEVENSTHEIN == 0) {
+	eval '
+		use Text::Levenshtein qw(distance);
+		$LEVENSTHEIN = 1;
+	';
+}
+
 my %TOOLBAR_STYLES = (
 	gettext('Icons')		=> 'icons',
 	gettext('Text')			=> 'text',
@@ -166,8 +178,13 @@ my $search_results = Gtk2::Ex::Simple::List->new_from_treeview(
 	mark	=> 'text',
 );
 
+my $search_results_building = 0;
 $search_results->get_selection->signal_connect('changed', sub {
-	print "FIX ME\n";
+	return 1 if ($search_results_building == 1);
+	my $idx = ($search_results->get_selected_indices)[0];
+	my $doc = $search_results->{data}[$idx][1];
+	$APP->get_widget('location')->entry->set_text($doc);
+	go(1);
 });
 
 eval {
@@ -1239,11 +1256,27 @@ sub set_status {
 
 sub search_input_changed {
 	my $text = $APP->get_widget('search_input')->get_text;
-	my @results;
-	use Data::Dumper;
-	foreach my $section (keys(%{$ITEMS})) {
-		print Dumper($ITEMS->{$section});
+	if ($text =~ /^\s?$/) {
+		$search_results->get_model->clear;
+		return 1;
 	}
+	my @matches;
+	foreach my $section (keys(%{$ITEMS})) {
+		foreach my $doc (keys(%{$ITEMS->{$section}})) {
+			next if ($doc =~ /^\s?$/);
+			my $match = 0;
+			$match++ if ($LEVENSTHEIN == 1 && distance($doc, $text) < 3);
+			$match++ if ($doc =~ /$text/i);
+			push(@matches, $doc) if ($match > 0);
+		}
+	}
+	$search_results_building = 1;
+	$search_results->get_model->clear;
+	foreach my $match (sort(@matches)) {
+		push(@{$search_results->{data}}, [ $PAGE_PBF, $match ]);
+	}
+	$search_results_building = 0;
+	return 1;
 }
 
 __END__
