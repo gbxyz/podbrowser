@@ -1,6 +1,6 @@
 Name:		podbrowser
 Summary:	A full-featured Perl Documentation Browser.
-Version:	0.10
+Version:	0.11
 Release:	1
 Epoch:		0
 Group:		Applications/Programming
@@ -14,7 +14,7 @@ Prefix:		%{_prefix}
 AutoReq:	no
 BuildArch:	noarch
 BuildRequires:	perl >= 5.8.0, gettext
-Requires:	gtk2 >= 2.8.0, libglade2, gnome-icon-theme > 2.10, gettext, perl >= 5.8.0, perl-URI, perl-Gtk2, perl-Gtk2-GladeXML >= 1.001, perl-gettext, perl-Gtk2-Ex-PodViewer >= 0.14, perl-Pod-Simple, perl-Gtk2-Ex-Simple-List, perl-Gtk2-Ex-PrintDialog
+Requires:	gtk2 >= 2.8.0, libglade2, gnome-icon-theme > 2.10, gettext, perl >= 5.8.0, perl-URI, perl-Gtk2, perl-Gtk2-GladeXML >= 1.001, perl-gettext, perl-Gtk2-Ex-PodViewer >= 0.14, perl-Pod-Simple, perl-Gtk2-Ex-Simple-List, perl-Gtk2-Ex-PrintDialog, perl-Text-Levenshtein
 
 %description
 PodBrowser is a documentation browser for Perl. You can view the documentation
