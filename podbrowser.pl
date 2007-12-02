@@ -21,7 +21,7 @@ use strict;
 
 ### set up global variables:
 my $NAME		= 'PodBrowser';
-my $VERSION		= '0.11';
+my $VERSION		= '0.12';
 my $PREFIX		= '@PREFIX@';
 my $GLADE_FILE		= (-d $PREFIX ? sprintf('%s/share/%s', $PREFIX, lc($NAME)) : $ENV{PWD}).sprintf('/%s.glade', lc($NAME));
 my $LOCALE_DIR		= (-d $PREFIX ? "PREFIX/share/locale" : $ENV{PWD}.'/locale');
@@ -103,6 +103,7 @@ $OPTIONS->{toolbar_style}	= (defined($OPTIONS->{toolbar_style})	? $OPTIONS->{too
 
 $APP->signal_autoconnect_from_package(__PACKAGE__);
 $APP->get_widget('location')->disable_activate;
+$APP->get_widget('location')->entry->signal_connect('activate', \&go);
 $APP->get_widget('open_dialog_location')->disable_activate;
 
 # this seems not to be applied from the glade, so force it:
